@@ -1,0 +1,353 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── ENUMS ──────────────────────────────────────────────────────────────────
+
+enum UserRole {
+  investor
+  car_owner
+  driver
+  admin
+}
+
+enum CarStatus {
+  active
+  paused
+  retired
+}
+
+enum ApplicationStatus {
+  pending
+  approved
+  rejected
+}
+
+enum RideStatus {
+  in_progress
+  completed
+  disputed
+}
+
+enum ExpenseType {
+  fuel
+  maintenance
+  cleaning
+  insurance
+  other
+}
+
+enum ExpenseStatus {
+  pending
+  approved
+  rejected
+}
+
+enum PaymentStatus {
+  pending
+  processing
+  completed
+  failed
+}
+
+enum TransactionType {
+  car_created
+  primary_purchase
+  listing_created
+  listing_filled
+  listing_cancelled
+}
+
+enum ListingStatus {
+  active
+  filled
+  cancelled
+}
+
+enum KYCStatus {
+  pending
+  verified
+  rejected
+}
+
+enum NotificationType {
+  info
+  success
+  warning
+  error
+}
+
+// ─── MODELS ─────────────────────────────────────────────────────────────────
+
+model User {
+  id            String     @id @default(cuid())
+  email         String?    @unique
+  passwordHash  String?
+  name          String
+  avatar        String?
+  walletAddress String?    @unique
+  roles         UserRole[]
+  activeRole    String?
+  kycVerified   Boolean    @default(false)
+  // Email verification
+  emailVerified            Boolean   @default(false)
+  emailVerificationToken   String?   @unique
+  emailVerificationExpiry  DateTime?
+  // Password reset (DB-backed, replacing in-memory map)
+  passwordResetToken       String?   @unique
+  passwordResetExpiry      DateTime?
+  // Onboarding questionnaire
+  onboardingCompleted      Boolean   @default(false)
+  // Roles requested during onboarding awaiting admin approval
+  pendingRoles             String[]  @default([])
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  kycVerification    KYCVerification?
+  driverProfile      DriverProfile?
+  driverApplications DriverApplication[]
+  ownedCars          Car[]
+  rides              Ride[]
+  expenses           Expense[]
+  dividends          Dividend[]
+  transactions       Transaction[]
+  notifications      Notification[]
+  listings           Listing[]
+  shareHoldings      ShareHolding[]
+  wallets            UserWallet[]
+
+  @@map("users")
+}
+
+model UserWallet {
+  id          String   @id @default(cuid())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      String
+  address     String   @unique
+  isPrimary   Boolean  @default(false)
+  label       String?
+  connectedAt DateTime @default(now())
+
+  @@unique([userId, address])
+  @@map("user_wallets")
+}
+
+model Car {
+  id                    Int       @id
+  owner                 User      @relation(fields: [ownerId], references: [id])
+  ownerId               String
+  name                  String
+  make                  String
+  model                 String
+  year                  Int
+  vin                   String    @unique
+  totalShares           Int
+  publicSupply          Int       @default(0)   // shares originally put on public sale
+  sharesSold            Int       @default(0)   // shares sold in primary sale so far
+  remainingPublicSupply Int       @default(0)   // unsold public shares still in contract
+  primarySaleActive     Boolean   @default(true) // false once owner calls withdrawPublicSupply or all sold
+  pricePerShare         String
+  metadataCID           String
+  status                CarStatus @default(active)
+  createdAt             DateTime  @default(now())
+
+  rides          Ride[]
+  expenses       Expense[]
+  dividends      Dividend[]
+  assignedDriver DriverProfile? @relation("AssignedCar")
+  listings       Listing[]
+  shareHoldings  ShareHolding[]
+
+  @@index([ownerId])
+  @@index([status])
+  @@map("cars")
+}
+
+model DriverProfile {
+  id            String  @id @default(cuid())
+  user          User    @relation(fields: [userId], references: [id])
+  userId        String  @unique
+  license       String
+  experience    Int
+  rating        Float   @default(0)
+  totalRides    Int     @default(0)
+  approved      Boolean @default(false)
+  assignedCar   Car?    @relation("AssignedCar", fields: [assignedCarId], references: [id])
+  assignedCarId Int?    @unique
+
+  @@map("driver_profiles")
+}
+
+model DriverApplication {
+  id          String            @id @default(cuid())
+  user        User              @relation(fields: [userId], references: [id])
+  userId      String
+  carId       Int
+  license     String
+  experience  Int
+  documents   Json
+  status      ApplicationStatus @default(pending)
+  reviewNote  String?
+  submittedAt DateTime          @default(now())
+  reviewedAt  DateTime?
+
+  @@index([userId])
+  @@index([status])
+  @@map("driver_applications")
+}
+
+model Ride {
+  id            String     @id @default(cuid())
+  car           Car        @relation(fields: [carId], references: [id])
+  carId         Int
+  driver        User       @relation(fields: [driverId], references: [id])
+  driverId      String
+  pickup        String
+  dropoff       String
+  distance      Float
+  duration      Int
+  grossEarnings String
+  commission    String
+  netEarnings   String
+  status        RideStatus @default(completed)
+  timestamp     DateTime   @default(now())
+
+  @@index([carId])
+  @@index([driverId])
+  @@index([timestamp])
+  @@map("rides")
+}
+
+model Expense {
+  id            String        @id @default(cuid())
+  car           Car           @relation(fields: [carId], references: [id])
+  carId         Int
+  submittedBy   User          @relation(fields: [submittedById], references: [id])
+  submittedById String
+  type          ExpenseType
+  amount        String
+  description   String?
+  receipt       String?
+  status        ExpenseStatus @default(pending)
+  submittedAt   DateTime      @default(now())
+  approvedAt    DateTime?
+
+  @@index([carId])
+  @@index([submittedById])
+  @@index([status])
+  @@map("expenses")
+}
+
+model Dividend {
+  id         String        @id @default(cuid())
+  investor   User          @relation(fields: [investorId], references: [id])
+  investorId String
+  car        Car           @relation(fields: [carId], references: [id])
+  carId      Int
+  amount     String
+  txHash     String?
+  status     PaymentStatus @default(pending)
+  createdAt  DateTime      @default(now())
+  paidAt     DateTime?
+
+  @@index([investorId])
+  @@index([carId])
+  @@map("dividends")
+}
+
+model Transaction {
+  id          String          @id @default(cuid())
+  user        User            @relation(fields: [userId], references: [id])
+  userId      String
+  type        TransactionType
+  carId       Int
+  amount      Int
+  price       String
+  txHash      String          @unique
+  blockNumber Int
+  timestamp   DateTime
+
+  @@index([userId])
+  @@index([carId])
+  @@index([timestamp])
+  @@map("transactions")
+}
+
+model KYCVerification {
+  id           String    @id @default(cuid())
+  user         User      @relation(fields: [userId], references: [id])
+  userId       String    @unique
+  documentType String
+  documentUrl  String
+  selfieUrl    String?
+  status       KYCStatus @default(pending)
+  reviewNote   String?
+  submittedAt  DateTime  @default(now())
+  reviewedAt   DateTime?
+
+  @@map("kyc_verifications")
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  user      User             @relation(fields: [userId], references: [id])
+  userId    String
+  title     String
+  message   String
+  type      NotificationType @default(info)
+  read      Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  @@index([userId, read])
+  @@index([userId, createdAt])
+  @@map("notifications")
+}
+
+model Listing {
+  id              Int           @id // blockchain listingId
+  seller          User          @relation(fields: [sellerId], references: [id])
+  sellerId        String
+  car             Car           @relation(fields: [carId], references: [id])
+  carId           Int
+  amount          Int // total shares listed
+  remainingAmount Int // shares still available
+  pricePerShare   String // wei string
+  status          ListingStatus @default(active)
+  txHash          String?       @unique
+  blockNumber     Int?
+  createdAt       DateTime      @default(now())
+  cancelledAt     DateTime?
+  filledAt        DateTime?
+
+  @@index([sellerId])
+  @@index([carId])
+  @@index([status])
+  @@map("listings")
+}
+
+model ShareHolding {
+  id            String   @id @default(cuid())
+  user          User     @relation(fields: [userId], references: [id])
+  userId        String
+  car           Car      @relation(fields: [carId], references: [id])
+  carId         Int
+  shares        Int // current balance
+  lastUpdatedAt DateTime @updatedAt
+
+  @@unique([userId, carId])
+  @@index([userId])
+  @@index([carId])
+  @@map("share_holdings")
+}
+
+model BlockchainSyncState {
+  id                 String   @id @default("singleton")
+  lastProcessedBlock Int      @default(0)
+  updatedAt          DateTime @updatedAt
+
+  @@map("blockchain_sync_state")
+}

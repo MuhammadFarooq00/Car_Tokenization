@@ -1,0 +1,5 @@
+-- AlterTable
+ALTER TABLE "cars" ADD COLUMN     "primarySaleActive" BOOLEAN NOT NULL DEFAULT true,
+ADD COLUMN     "publicSupply" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN     "remainingPublicSupply" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN     "sharesSold" INTEGER NOT NULL DEFAULT 0;

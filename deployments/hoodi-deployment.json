@@ -1,0 +1,14 @@
+{
+  "network": "hoodi",
+  "deployer": "0x077ff866257Da5Fd7483842739593c0C37F3a118",
+  "timestamp": "2026-02-24T10:10:15.708Z",
+  "contracts": {
+    "CarShares": "0x40552E63259D54552BfeB9c89Bd93cB59dD5Fbf4",
+    "Marketplace": "0x2ED8cfB0dc16f029ffbA4283EDa0439d43ABAd6D"
+  },
+  "configuration": {
+    "globalFeeBps": "250",
+    "maxFeeBps": "1000",
+    "owner": "0x077ff866257Da5Fd7483842739593c0C37F3a118"
+  }
+}
